@@ -1,32 +1,58 @@
-const NIGHT_START_HOUR = 22;
-const NIGHT_END_HOUR = 6;
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
-function applyNightMode(now) {
-  const hour = now.getHours();
-  const isNight = hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
-  document.body.classList.toggle('night', isNight);
-}
+function renderCalendar() {
+  const grid = document.getElementById('calendar-grid');
+  const title = document.getElementById('calendar-title');
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
 
-export function startClock() {
-  const timeEl = document.getElementById('clock-time');
-  const dateEl = document.getElementById('clock-date');
+  title.textContent = `${year}年${month + 1}月`;
+  grid.innerHTML = '';
 
-  function tick() {
-    const now = new Date();
-    timeEl.textContent = now.toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-    dateEl.textContent = now.toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long',
-    });
-    applyNightMode(now);
+  WEEKDAYS.forEach((label, index) => {
+    const cell = document.createElement('div');
+    cell.className = 'calendar-weekday';
+    if (index === 0) cell.classList.add('sunday');
+    if (index === 6) cell.classList.add('saturday');
+    cell.textContent = label;
+    grid.appendChild(cell);
+  });
+
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 0; i < firstWeekday; i++) {
+    grid.appendChild(document.createElement('div'));
   }
 
-  tick();
-  setInterval(tick, 1000);
+  for (let day = 1; day <= daysInMonth; day++) {
+    const weekday = new Date(year, month, day).getDay();
+    const cell = document.createElement('div');
+    cell.className = 'calendar-day';
+    if (weekday === 0) cell.classList.add('sunday');
+    if (weekday === 6) cell.classList.add('saturday');
+    if (day === today.getDate()) cell.classList.add('today');
+    cell.textContent = String(day);
+    grid.appendChild(cell);
+  }
+}
+
+function msUntilNextMidnight() {
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+  return nextMidnight - now;
+}
+
+export function scheduleCalendarRefresh() {
+  renderCalendar();
+
+  function scheduleNext() {
+    setTimeout(() => {
+      renderCalendar();
+      scheduleNext();
+    }, msUntilNextMidnight());
+  }
+
+  scheduleNext();
 }

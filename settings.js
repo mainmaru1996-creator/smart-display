@@ -1,58 +1,100 @@
-const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const DEFAULT_LOCATION = { name: '東京', lat: 35.6762, lon: 139.6503 };
+const LOCATION_STORAGE_KEY = 'weather-location';
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 
-function renderCalendar() {
-  const grid = document.getElementById('calendar-grid');
-  const title = document.getElementById('calendar-title');
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
+const WEATHER_CODE_LABELS = {
+  0: '晴れ',
+  1: 'ほぼ晴れ',
+  2: '一部曇り',
+  3: '曇り',
+  45: '霧',
+  48: '霧',
+  51: '弱い霧雨',
+  53: '霧雨',
+  55: '強い霧雨',
+  61: '弱い雨',
+  63: '雨',
+  65: '強い雨',
+  71: '弱い雪',
+  73: '雪',
+  75: '強い雪',
+  80: 'にわか雨',
+  81: 'にわか雨',
+  82: '激しいにわか雨',
+  95: '雷雨',
+  96: '雷雨(あられ)',
+  99: '雷雨(あられ)',
+};
 
-  title.textContent = `${year}年${month + 1}月`;
-  grid.innerHTML = '';
+function describeWeatherCode(code) {
+  return WEATHER_CODE_LABELS[code] ?? '不明';
+}
 
-  WEEKDAYS.forEach((label, index) => {
-    const cell = document.createElement('div');
-    cell.className = 'calendar-weekday';
-    if (index === 0) cell.classList.add('sunday');
-    if (index === 6) cell.classList.add('saturday');
-    cell.textContent = label;
-    grid.appendChild(cell);
+export function getLocation() {
+  try {
+    const saved = localStorage.getItem(LOCATION_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // 破損データは無視してデフォルトへフォールバック
+  }
+  return DEFAULT_LOCATION;
+}
+
+export function setLocation(location) {
+  localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(location));
+}
+
+export async function geocodeCityName(cityName) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=ja&format=json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('geocoding request failed');
+  const data = await res.json();
+  const result = data.results?.[0];
+  if (!result) throw new Error('location not found');
+  return { name: result.name, lat: result.latitude, lon: result.longitude };
+}
+
+function renderForecast(daily) {
+  const forecastEl = document.getElementById('weather-forecast');
+  forecastEl.innerHTML = '';
+  const days = daily.time.slice(1, 4);
+  days.forEach((isoDate, index) => {
+    const dayIndex = index + 1;
+    const date = new Date(isoDate);
+    const label = date.toLocaleDateString('ja-JP', { weekday: 'short' });
+    const max = Math.round(daily.temperature_2m_max[dayIndex]);
+    const min = Math.round(daily.temperature_2m_min[dayIndex]);
+
+    const el = document.createElement('div');
+    el.className = 'forecast-day';
+    el.innerHTML = `<div>${label}</div><div class="forecast-temp">${max}° / ${min}°</div>`;
+    forecastEl.appendChild(el);
   });
+}
 
-  const firstWeekday = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+export async function updateWeather() {
+  const location = getLocation();
+  const nameEl = document.getElementById('weather-location');
+  const tempEl = document.getElementById('weather-temp');
+  const descEl = document.getElementById('weather-desc');
 
-  for (let i = 0; i < firstWeekday; i++) {
-    grid.appendChild(document.createElement('div'));
-  }
+  nameEl.textContent = location.name;
 
-  for (let day = 1; day <= daysInMonth; day++) {
-    const weekday = new Date(year, month, day).getDay();
-    const cell = document.createElement('div');
-    cell.className = 'calendar-day';
-    if (weekday === 0) cell.classList.add('sunday');
-    if (weekday === 6) cell.classList.add('saturday');
-    if (day === today.getDate()) cell.classList.add('today');
-    cell.textContent = String(day);
-    grid.appendChild(cell);
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('forecast request failed');
+    const data = await res.json();
+
+    tempEl.textContent = `${Math.round(data.current.temperature_2m)}°C`;
+    descEl.textContent = describeWeatherCode(data.current.weather_code);
+    renderForecast(data.daily);
+  } catch {
+    descEl.textContent = '天気情報を取得できませんでした';
   }
 }
 
-function msUntilNextMidnight() {
-  const now = new Date();
-  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
-  return nextMidnight - now;
-}
-
-export function scheduleCalendarRefresh() {
-  renderCalendar();
-
-  function scheduleNext() {
-    setTimeout(() => {
-      renderCalendar();
-      scheduleNext();
-    }, msUntilNextMidnight());
-  }
-
-  scheduleNext();
+export function scheduleWeatherRefresh() {
+  updateWeather();
+  setInterval(updateWeather, REFRESH_INTERVAL_MS);
 }

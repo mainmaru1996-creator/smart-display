@@ -1,48 +1,21 @@
-import { getLocation, setLocation, geocodeCityName, updateWeather } from './weather.js';
+let wakeLock = null;
 
-export function setupSettings() {
-  const button = document.getElementById('settings-button');
-  const modal = document.getElementById('settings-modal');
-  const input = document.getElementById('location-input');
-  const errorEl = document.getElementById('settings-error');
-  const cancelButton = document.getElementById('settings-cancel');
-  const saveButton = document.getElementById('settings-save');
-
-  function openModal() {
-    input.value = getLocation().name;
-    errorEl.textContent = '';
-    modal.classList.remove('hidden');
-    input.focus();
+export async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null;
+    });
+  } catch {
+    // 非対応環境や権限拒否時は常時表示なしで継続する
   }
+}
 
-  function closeModal() {
-    modal.classList.add('hidden');
-  }
-
-  async function save() {
-    const cityName = input.value.trim();
-    if (!cityName) {
-      errorEl.textContent = '地域名を入力してください';
-      return;
+export function setupWakeLockReacquire() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeLock === null) {
+      requestWakeLock();
     }
-    saveButton.disabled = true;
-    errorEl.textContent = '検索中...';
-    try {
-      const location = await geocodeCityName(cityName);
-      setLocation(location);
-      await updateWeather();
-      closeModal();
-    } catch {
-      errorEl.textContent = '地域が見つかりませんでした';
-    } finally {
-      saveButton.disabled = false;
-    }
-  }
-
-  button.addEventListener('click', openModal);
-  cancelButton.addEventListener('click', closeModal);
-  saveButton.addEventListener('click', save);
-  modal.addEventListener('click', (event) => {
-    if (event.target === modal) closeModal();
   });
 }
