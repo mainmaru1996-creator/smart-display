@@ -246,6 +246,17 @@ html, body {
   font-weight: 600;
 }
 
+@media (orientation: portrait) {
+  .panels {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .panel {
+    max-width: 320px;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
   .dashboard {
     flex-direction: row;
