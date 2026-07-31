@@ -1,12 +1,3 @@
-const NIGHT_START_HOUR = 22;
-const NIGHT_END_HOUR = 6;
-
-function applyNightMode(now) {
-  const hour = now.getHours();
-  const isNight = hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR;
-  document.body.classList.toggle('night', isNight);
-}
-
 export function startClock() {
   const timeEl = document.getElementById('clock-time');
   const dateEl = document.getElementById('clock-date');
@@ -24,7 +15,6 @@ export function startClock() {
       day: 'numeric',
       weekday: 'long',
     });
-    applyNightMode(now);
   }
 
   tick();
