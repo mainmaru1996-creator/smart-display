@@ -246,13 +246,81 @@ html, body {
   font-weight: 600;
 }
 
-@media (orientation: portrait) {
-  .panels {
-    flex-direction: column;
+@media (orientation: landscape) and (max-height: 500px) {
+  .dashboard {
+    flex-direction: row;
     align-items: center;
+    justify-content: center;
+    gap: clamp(1rem, 3vw, 2.5rem);
+    padding: clamp(0.5rem, 2vh, 1rem);
+  }
+
+  .clock-time {
+    font-size: clamp(2rem, 14vh, 5rem);
+  }
+
+  .clock-date {
+    margin-top: 0.3rem;
+    font-size: clamp(0.6rem, 2.2vh, 0.9rem);
+  }
+
+  .panels {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: clamp(1rem, 3vw, 2.5rem);
+    max-width: none;
+    width: auto;
   }
 
   .panel {
-    max-width: 320px;
+    flex: 0 1 auto;
+    max-width: 190px;
+    min-width: 150px;
+  }
+
+  .panel-title {
+    margin-bottom: 0.3rem;
+    font-size: clamp(0.6rem, 1.8vh, 0.8rem);
+  }
+
+  .calendar-grid {
+    gap: 0.15rem 0.08rem;
+  }
+
+  .calendar-weekday {
+    font-size: clamp(0.55rem, 1.6vh, 0.75rem);
+    padding-bottom: 0.15rem;
+  }
+
+  .calendar-day {
+    font-size: clamp(0.55rem, 1.8vh, 0.8rem);
+    padding: clamp(0.05rem, 0.4vh, 0.2rem) 0;
+  }
+
+  .weather-location {
+    font-size: clamp(0.6rem, 1.8vh, 0.85rem);
+  }
+
+  .weather-temp {
+    margin-top: 0.2rem;
+    font-size: clamp(1.25rem, 5vh, 1.8rem);
+  }
+
+  .weather-desc {
+    margin-bottom: 0.3rem;
+    font-size: clamp(0.55rem, 1.6vh, 0.75rem);
+  }
+
+  .weather-forecast {
+    gap: 0.4rem;
+  }
+
+  .forecast-day {
+    font-size: clamp(0.5rem, 1.5vh, 0.7rem);
+  }
+
+  .forecast-day .forecast-icon {
+    margin-top: 0.15rem;
+    font-size: clamp(0.8rem, 2.2vh, 1.1rem);
   }
 }
