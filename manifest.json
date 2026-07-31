@@ -1,21 +1,19 @@
-let wakeLock = null;
-
-export async function requestWakeLock() {
-  if (!('wakeLock' in navigator)) return;
-  try {
-    wakeLock = await navigator.wakeLock.request('screen');
-    wakeLock.addEventListener('release', () => {
-      wakeLock = null;
-    });
-  } catch {
-    // 非対応環境や権限拒否時は常時表示なしで継続する
-  }
-}
-
-export function setupWakeLockReacquire() {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && wakeLock === null) {
-      requestWakeLock();
+{
+  "name": "卓上ディスプレイ - 時計・カレンダー・天気",
+  "short_name": "卓上ディスプレイ",
+  "description": "使わなくなったスマホを時計・カレンダー・天気の卓上ディスプレイとして使うアプリ",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
-  });
+  ]
 }
