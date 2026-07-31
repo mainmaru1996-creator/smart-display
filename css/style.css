@@ -152,6 +152,12 @@ body.night {
   color: var(--faint);
 }
 
+.forecast-day .forecast-icon {
+  margin-top: 0.3rem;
+  font-size: clamp(1rem, 2.2vw, 1.3rem);
+  opacity: 0.75;
+}
+
 .forecast-day .forecast-temp {
   margin-top: 0.15rem;
   color: var(--muted);
