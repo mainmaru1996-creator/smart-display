@@ -1,12 +1,12 @@
 :root {
   color-scheme: dark;
   --bg: #0a0a0b;
-  --fg: #e4e4e4;
-  --muted: #767676;
-  --faint: #4a4a4a;
-  --accent: #cfcfcf;
-  --sunday: #b98f8f;
-  --saturday: #8f9db9;
+  --fg: #f5f5f5;
+  --muted: #b0b0b0;
+  --faint: #8c8c8c;
+  --accent: #e6e6e6;
+  --sunday: #e0a3a3;
+  --saturday: #a3b8e0;
   --border: rgba(255, 255, 255, 0.08);
 }
 
@@ -39,11 +39,11 @@ html, body {
 
 .clock-time {
   font-size: clamp(4rem, 16vw, 12rem);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1;
   letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums;
-  color: #ececec;
+  color: #ffffff;
 }
 
 .clock-date {
@@ -107,8 +107,8 @@ html, body {
 }
 
 .calendar-day.today {
-  color: #f5f5f5;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
 }
 
 .weather-location {
@@ -120,9 +120,9 @@ html, body {
 .weather-temp {
   margin-top: 0.5rem;
   font-size: clamp(2.25rem, 5.5vw, 3.5rem);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1.1;
-  color: #ececec;
+  color: #ffffff;
 }
 
 .weather-desc {
