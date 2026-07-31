@@ -261,9 +261,10 @@ html, body {
   .dashboard {
     flex-direction: row;
     align-items: center;
-    justify-content: center;
-    gap: clamp(1rem, 3vw, 2.5rem);
-    padding: clamp(0.5rem, 2vh, 1rem);
+    justify-content: space-evenly;
+    width: 100%;
+    gap: clamp(1.5rem, 5vw, 5rem);
+    padding: clamp(0.5rem, 2vh, 1rem) clamp(1.5rem, 5vw, 4rem);
   }
 
   .clock-time {
@@ -276,17 +277,19 @@ html, body {
   }
 
   .panels {
+    flex: 1 1 auto;
     flex-direction: row;
     flex-wrap: nowrap;
-    gap: clamp(1rem, 3vw, 2.5rem);
+    justify-content: space-evenly;
+    gap: clamp(1.5rem, 5vw, 4rem);
     max-width: none;
     width: auto;
   }
 
   .panel {
-    flex: 0 1 auto;
-    max-width: 190px;
-    min-width: 150px;
+    flex: 1 1 180px;
+    max-width: 300px;
+    min-width: 0;
   }
 
   .panel-title {
