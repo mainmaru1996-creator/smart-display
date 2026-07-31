@@ -1,16 +1,21 @@
-import { startClock } from './clock.js';
-import { scheduleCalendarRefresh } from './calendar.js';
-import { scheduleWeatherRefresh } from './weather.js';
-import { setupSettings } from './settings.js';
-import { requestWakeLock, setupWakeLockReacquire } from './wakelock.js';
+let wakeLock = null;
 
-startClock();
-scheduleCalendarRefresh();
-scheduleWeatherRefresh();
-setupSettings();
-requestWakeLock();
-setupWakeLockReacquire();
+export async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null;
+    });
+  } catch {
+    // 非対応環境や権限拒否時は常時表示なしで継続する
+  }
+}
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+export function setupWakeLockReacquire() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeLock === null) {
+      requestWakeLock();
+    }
+  });
 }
