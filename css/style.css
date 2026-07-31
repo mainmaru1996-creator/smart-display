@@ -257,6 +257,47 @@ html, body {
   }
 }
 
+@media (orientation: portrait) and (min-height: 700px) {
+  .dashboard {
+    gap: clamp(2.5rem, 8vh, 6rem);
+    padding: clamp(1.5rem, 5vh, 3rem);
+  }
+
+  .clock-time {
+    font-size: clamp(4.5rem, 20vw, 12rem);
+  }
+
+  .clock-date {
+    margin-top: 0.75rem;
+    font-size: clamp(1rem, 3vw, 1.6rem);
+  }
+
+  .panels {
+    gap: clamp(1.5rem, 5vh, 3rem);
+  }
+
+  .panel {
+    max-width: 340px;
+  }
+
+  .panel-title {
+    font-size: clamp(0.85rem, 2vw, 1.1rem);
+  }
+
+  .calendar-day {
+    font-size: clamp(0.9rem, 2.2vw, 1.3rem);
+    padding: 0.4rem 0;
+  }
+
+  .weather-temp {
+    font-size: clamp(2.5rem, 7vw, 3.75rem);
+  }
+
+  .forecast-day {
+    font-size: clamp(0.75rem, 1.9vw, 1rem);
+  }
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
   .dashboard {
     flex-direction: row;
