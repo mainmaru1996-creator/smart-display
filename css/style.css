@@ -23,14 +23,6 @@ html, body {
   overflow: hidden;
 }
 
-body {
-  transition: filter 3s ease;
-}
-
-body.night {
-  filter: brightness(0.55);
-}
-
 .dashboard {
   height: 100vh;
   display: flex;
