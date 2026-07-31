@@ -1,42 +1,260 @@
-# 卓上ディスプレイアプリ
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0b;
+  --fg: #e4e4e4;
+  --muted: #767676;
+  --faint: #4a4a4a;
+  --accent: #cfcfcf;
+  --sunday: #b98f8f;
+  --saturday: #8f9db9;
+  --border: rgba(255, 255, 255, 0.08);
+}
 
-## 概要
+* {
+  box-sizing: border-box;
+}
 
-使用していないスマートフォンを、時計・カレンダー・天気予報を表示する卓上ディスプレイとして再利用するためのWebアプリ（PWA）です。ブラウザで開いてホーム画面に追加すれば、専用アプリのように常時表示できます。
+html, body {
+  margin: 0;
+  height: 100%;
+  background: radial-gradient(ellipse at center, #131314 0%, #08080a 70%);
+  color: var(--fg);
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  overflow: hidden;
+}
 
-- 大きな文字のデジタル時計と日付表示
-- 今月のカレンダー（今日の日付をハイライト）
-- 天気予報（現在の気温・天気、3日分の予報）
-- 常時表示を想定したダーク基調のデザイン、深夜帯（22:00〜6:00）は自動的に画面を暗くする
-- 対応端末では Wake Lock API により画面消灯を防止
+body {
+  transition: filter 3s ease;
+}
 
-天気情報は [Open-Meteo](https://open-meteo.com/) の無料API（APIキー不要・読み取り専用）を利用しています。カレンダーは現時点では外部サービスと連携せず、端末のカレンダー機能のみを表示します（今後拡張する場合はGoogleカレンダー等の読み取り専用スコープでの連携を検討）。
+body.night {
+  filter: brightness(0.55);
+}
 
-## セットアップ
+.dashboard {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2.5rem, 7vh, 5rem);
+  padding: clamp(1.5rem, 5vw, 4rem);
+}
 
-ビルド不要の静的なWebアプリです。ローカルでHTTPサーバーを立てて動作確認してください（`file://` で直接開くとService WorkerやWake Lock APIが動作しません）。
+.clock {
+  text-align: center;
+}
 
-```bash
-# 例1: Node.jsがある場合
-npx serve .
+.clock-time {
+  font-size: clamp(4rem, 16vw, 12rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #ececec;
+}
 
-# 例2: Pythonがある場合
-python3 -m http.server 8080
-```
+.clock-date {
+  margin-top: 0.75rem;
+  font-size: clamp(0.9rem, 2.2vw, 1.4rem);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
 
-## 使い方
+.panels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(2.5rem, 6vw, 5rem);
+  width: 100%;
+  max-width: 1000px;
+  justify-content: center;
+}
 
-1. 上記のサーバーを起動し、スマートフォンのブラウザで表示されたURLにアクセスします（同じWi-Fiネットワーク上でPCのIPアドレスを指定してください）。
-2. 右上の歯車アイコンから地域名を入力すると、その地域の天気予報が表示されます。
-3. ブラウザのメニューから「ホーム画面に追加」を選ぶと、アプリのように起動できます。
-4. スマートフォンをスタンドなどに立てて卓上ディスプレイとして設置してください。
+.panel {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 360px;
+}
 
-## 今後の拡張案
+.panel-title {
+  margin: 0 0 1.25rem;
+  font-size: clamp(0.75rem, 1.4vw, 0.95rem);
+  letter-spacing: 0.15em;
+  color: var(--faint);
+  font-weight: 500;
+}
 
-- Googleカレンダー等の予定表示（読み取り専用スコープでの連携）
-- 写真スライドショー表示
-- 明るさ・レイアウトのカスタム設定
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem 0.15rem;
+  text-align: center;
+}
 
-## ライセンス
+.calendar-weekday {
+  font-size: clamp(0.7rem, 1.3vw, 0.9rem);
+  color: var(--faint);
+  padding-bottom: 0.4rem;
+}
 
-未定
+.calendar-day {
+  padding: 0.35rem 0;
+  border-radius: 50%;
+  font-size: clamp(0.8rem, 1.6vw, 1.05rem);
+  color: var(--muted);
+}
+
+.calendar-weekday.sunday,
+.calendar-day.sunday {
+  color: var(--sunday);
+}
+
+.calendar-weekday.saturday,
+.calendar-day.saturday {
+  color: var(--saturday);
+}
+
+.calendar-day.today {
+  color: #f5f5f5;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.weather-location {
+  font-size: clamp(0.9rem, 1.8vw, 1.1rem);
+  color: var(--muted);
+  letter-spacing: 0.05em;
+}
+
+.weather-temp {
+  margin-top: 0.5rem;
+  font-size: clamp(2.25rem, 5.5vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1.1;
+  color: #ececec;
+}
+
+.weather-desc {
+  font-size: clamp(0.8rem, 1.6vw, 1rem);
+  color: var(--faint);
+  margin-bottom: 1.25rem;
+}
+
+.weather-forecast {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.forecast-day {
+  flex: 1 1 60px;
+  text-align: center;
+  font-size: clamp(0.7rem, 1.4vw, 0.85rem);
+  color: var(--faint);
+}
+
+.forecast-day .forecast-temp {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.icon-button {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 10;
+  background: transparent;
+  border: none;
+  color: var(--faint);
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.3s ease;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+  opacity: 1;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: #16161a;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  width: min(90vw, 360px);
+}
+
+.modal-content label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.modal-content input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: #0a0b0e;
+  color: var(--fg);
+  font-size: 1rem;
+}
+
+.settings-error {
+  color: var(--sunday);
+  font-size: 0.85rem;
+  min-height: 1.2em;
+  margin-top: 0.5rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.modal-actions button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: #1a1d23;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+#settings-save {
+  background: var(--accent);
+  color: #16161a;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+@media (orientation: portrait) {
+  .panels {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .panel {
+    max-width: 320px;
+  }
+}
