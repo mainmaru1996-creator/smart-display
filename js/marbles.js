@@ -11,7 +11,7 @@ const STYLES = {
   background: {
     fps: 30,
     lineWidth: 4,
-    trail: 5,
+    trail: 6,
     frame: 'rgba(255, 255, 255, 0.10)',
     slope: 'rgba(255, 255, 255, 0.11)',
     step: 'rgba(255, 255, 255, 0.11)',
@@ -251,13 +251,13 @@ function drawMarbles() {
       : `rgba(${outer[0]}, ${outer[1]}, ${outer[2]}, ${outer[3]})`;
     const fade = tint ? `rgba(${tint[0]}, ${tint[1]}, ${tint[2]}, 0)` : `rgba(${outer[0]}, ${outer[1]}, ${outer[2]}, 0)`;
 
-    const glow = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, MARBLE_RADIUS * 3);
+    const glow = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, MARBLE_RADIUS * 2.4);
     glow.addColorStop(0, glowInner);
     glow.addColorStop(0.45, glowOuter);
     glow.addColorStop(1, fade);
     ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(m.x, m.y, MARBLE_RADIUS * 3, 0, Math.PI * 2);
+    ctx.arc(m.x, m.y, MARBLE_RADIUS * 2.4, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = style.marbleCore;
