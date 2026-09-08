@@ -5,7 +5,7 @@
  * カーブは2枚の壁で挟んだ管（チャンネル）として作り、下りカーブだけで構成する。
  */
 
-export const MARBLE_RADIUS = 5;
+export const MARBLE_RADIUS = 7;
 export const PEG_RADIUS = 2.5;
 export const SEGMENT_HALF_THICKNESS = 2;
 
@@ -36,10 +36,15 @@ const STUCK_LIMIT_S = 3.5;
 
 const LIFT_SPEED = 115;             // px/s。搬送が遅いと玉が受け皿に溜まって機械が空になる
 
-const ROAM_SPEED_MIN = 55;          // 跳ね回る玉の速さ（px/s）
-const ROAM_SPEED_MAX = 95;
-const ROAM_CHECK_S = 10;            // 狭い場所に閉じ込められていないか調べる間隔
-const ROAM_MIN_TRAVEL = 50;         // この間にこれだけ動いていなければ別の場所へ移す
+// 通常表示: 重力で落ちて跳ね返る。反発係数だけに頼ると跳ねる高さが下がって
+// 画面下に溜まるので、床や上向きの面に当たるたび画面の高い位置まで戻る初速を与える
+const BOUNCE_APEX_MIN = 0.4;        // 跳ね上がる高さ（画面高に対する割合）
+const BOUNCE_APEX_MAX = 0.85;
+const BOUNCE_VX_MIN = 40;           // 横方向の速さ（px/s）
+const BOUNCE_VX_MAX = 100;
+const BOUNCE_MIN_VY = 180;          // これより弱い跳ね返りなら上向きの初速を与え直す
+const BOUNCE_CHECK_S = 10;          // 狭い場所に閉じ込められていないか調べる間隔
+const BOUNCE_MIN_TRAVEL = 50;       // この間にこれだけ動いていなければ別の場所へ移す
 
 // 重力で落ちる仕掛け（演出モード）と、画面全体を跳ね回る動き（通常表示）
 const PHYSICS = {
@@ -48,10 +53,11 @@ const PHYSICS = {
     surface: SURFACE_RESTITUTION, roll: ROLL_RESISTANCE, wall: WALL_RESTITUTION,
     peg: PEG_RESTITUTION, gear: GEAR_RESTITUTION, grip: GEAR_GRIP,
   },
-  roam: {
-    gravity: 0, drag: 0, maxSpeed: 220,
-    surface: 1, roll: 0, wall: 1,
-    peg: 1, gear: 0.95, grip: 0.15,
+  bounce: {
+    // 常時表示の背景なので、落下が速すぎて慌ただしくならない程度に重力を弱めてある
+    gravity: 300, drag: 0, maxSpeed: 700,
+    surface: 0.9, roll: 0, wall: 1,
+    peg: 0.95, gear: 0.95, grip: 0.15,
   },
 };
 
@@ -84,7 +90,7 @@ function pickFloorKind(kinds, index, remaining, floorGap) {
 export const PRESETS = {
   // 常時表示の背景。控えめに、画面全体をビー玉が跳ね回る
   background: {
-    motion: 'roam',
+    motion: 'bounce',
     marbleCount: 12,
   },
   // 演出モード。多層フレームとリフトで玉が循環する
@@ -382,6 +388,7 @@ function buildLane(m, laneX, laneWidth, preset) {
 
 /* ---------------- 跳ね回る場（通常表示） ---------------- */
 
+
 // 障害物同士が近すぎないように場所を探す
 function placeCircle(m, placed, radius, margin) {
   const spanX = Math.max(1, m.width - (margin + radius) * 2);
@@ -404,7 +411,7 @@ function placeCircle(m, placed, radius, margin) {
   return null;
 }
 
-function buildRoamField(m) {
+function buildBounceField(m) {
   const placed = [];
   const short = Math.min(m.width, m.height);
   const area = m.width * m.height;
@@ -511,26 +518,13 @@ function pruneTightGaps(m) {
 
 /* ---------------- 玉 ---------------- */
 
-// 真横・真上に近い向きは動きが単調になるので避ける
-function randomRoamAngle() {
-  const sector = Math.PI / 2;
-  const limit = 0.35;
-  const angle = Math.random() * Math.PI * 2;
-  const offset = angle % sector;
-  if (offset < limit) return angle + limit;
-  if (offset > sector - limit) return angle - limit;
-  return angle;
-}
-
 function resetMarble(m, marble, spread) {
-  if (m.preset.motion === 'roam') {
+  if (m.preset.motion === 'bounce') {
     const margin = MARBLE_RADIUS * 4;
     marble.x = margin + Math.random() * Math.max(1, m.width - margin * 2);
-    marble.y = margin + Math.random() * Math.max(1, m.height - margin * 2);
-    marble.targetSpeed = ROAM_SPEED_MIN + Math.random() * (ROAM_SPEED_MAX - ROAM_SPEED_MIN);
-    const angle = randomRoamAngle();
-    marble.vx = Math.cos(angle) * marble.targetSpeed;
-    marble.vy = Math.sin(angle) * marble.targetSpeed;
+    marble.y = margin + Math.random() * Math.max(1, m.height * 0.5);
+    marble.vx = (Math.random() < 0.5 ? -1 : 1) * (BOUNCE_VX_MIN + Math.random() * (BOUNCE_VX_MAX - BOUNCE_VX_MIN));
+    marble.vy = 0;
     marble.stillTime = 0;
     marble.carried = false;
     marble.wanderTime = 0;
@@ -554,10 +548,11 @@ function resetMarble(m, marble, spread) {
 
 /* ---------------- 当たり判定 ---------------- */
 
+// 接触したときは面の法線のy成分を返す（上向きの面に乗ったかの判定に使う）
 function collideSegment(m, s, dt, phys) {
   const minDist = MARBLE_RADIUS + SEGMENT_HALF_THICKNESS;
-  if (m.y < s.minY - minDist || m.y > s.maxY + minDist) return;
-  if (m.x < s.minX - minDist || m.x > s.maxX + minDist) return;
+  if (m.y < s.minY - minDist || m.y > s.maxY + minDist) return 0;
+  if (m.x < s.minX - minDist || m.x > s.maxX + minDist) return 0;
 
   let t = ((m.x - s.x1) * s.abx + (m.y - s.y1) * s.aby) / s.lenSq;
   t = clamp(t, 0, 1);
@@ -566,7 +561,7 @@ function collideSegment(m, s, dt, phys) {
   const dx = m.x - px;
   const dy = m.y - py;
   const distSq = dx * dx + dy * dy;
-  if (distSq >= minDist * minDist) return;
+  if (distSq >= minDist * minDist) return 0;
 
   const dist = Math.sqrt(distSq);
   const nx = dist < 0.0001 ? 0 : dx / dist;
@@ -575,7 +570,7 @@ function collideSegment(m, s, dt, phys) {
   m.y = py + ny * minDist;
 
   const vn = m.vx * nx + m.vy * ny;
-  if (vn >= 0) return;
+  if (vn >= 0) return ny;
   m.vx -= (1 + phys.surface) * vn * nx;
   m.vy -= (1 + phys.surface) * vn * ny;
 
@@ -586,6 +581,7 @@ function collideSegment(m, s, dt, phys) {
   const resistance = Math.min(1, phys.roll * dt);
   m.vx -= tx * vt * resistance;
   m.vy -= ty * vt * resistance;
+  return ny;
 }
 
 function collidePeg(m, p, phys) {
@@ -593,7 +589,7 @@ function collidePeg(m, p, phys) {
   const dx = m.x - p.x;
   const dy = m.y - p.y;
   const distSq = dx * dx + dy * dy;
-  if (distSq === 0 || distSq >= minDist * minDist) return;
+  if (distSq === 0 || distSq >= minDist * minDist) return 0;
 
   const dist = Math.sqrt(distSq);
   const nx = dx / dist;
@@ -602,14 +598,16 @@ function collidePeg(m, p, phys) {
   m.y = p.y + ny * minDist;
 
   const vn = m.vx * nx + m.vy * ny;
-  if (vn >= 0) return;
+  if (vn >= 0) return ny;
   m.vx -= (1 + phys.peg) * vn * nx;
   m.vy -= (1 + phys.peg) * vn * ny;
 
-  if (-vn < PEG_JITTER_MIN_SPEED) return;
-  const jitter = (Math.random() - 0.5) * PEG_JITTER;
-  m.vx += -ny * jitter;
-  m.vy += nx * jitter;
+  if (-vn >= PEG_JITTER_MIN_SPEED) {
+    const jitter = (Math.random() - 0.5) * PEG_JITTER;
+    m.vx += -ny * jitter;
+    m.vy += nx * jitter;
+  }
+  return ny;
 }
 
 function collideGear(m, g, phys) {
@@ -617,7 +615,7 @@ function collideGear(m, g, phys) {
   const dx = m.x - g.x;
   const dy = m.y - g.y;
   const distSq = dx * dx + dy * dy;
-  if (distSq === 0 || distSq >= minDist * minDist) return;
+  if (distSq === 0 || distSq >= minDist * minDist) return 0;
 
   const dist = Math.sqrt(distSq);
   const nx = dx / dist;
@@ -632,7 +630,7 @@ function collideGear(m, g, phys) {
   let rvy = m.vy - surfaceY;
 
   const vn = rvx * nx + rvy * ny;
-  if (vn >= 0) return;
+  if (vn >= 0) return ny;
   rvx -= (1 + phys.gear) * vn * nx;
   rvy -= (1 + phys.gear) * vn * ny;
 
@@ -644,6 +642,7 @@ function collideGear(m, g, phys) {
 
   m.vx = rvx + surfaceX;
   m.vy = rvy + surfaceY;
+  return ny;
 }
 
 /* ---------------- リフト ---------------- */
@@ -701,9 +700,9 @@ export function createMachine(width, height, mode) {
     lanes: [], marbles: [], spawn: null,
   };
 
-  if (preset.motion === 'roam') {
+  if (preset.motion === 'bounce') {
     machine.lanes.push({ x: 0, width });
-    buildRoamField(machine);
+    buildBounceField(machine);
   } else {
     const laneCount = Math.max(1, Math.round(width / preset.laneTargetWidth));
     const laneWidth = width / laneCount;
@@ -716,7 +715,7 @@ export function createMachine(width, height, mode) {
   pruneTightGaps(machine);
 
   for (let i = 0; i < preset.marbleCount; i++) {
-    const marble = { x: 0, y: 0, vx: 0, vy: 0, stillTime: 0, carried: false, targetSpeed: 0, wanderTime: 0, checkX: 0, checkY: 0 };
+    const marble = { x: 0, y: 0, vx: 0, vy: 0, stillTime: 0, carried: false, wanderTime: 0, checkX: 0, checkY: 0 };
     resetMarble(machine, marble, true);
     machine.marbles.push(marble);
   }
@@ -724,11 +723,24 @@ export function createMachine(width, height, mode) {
   return machine;
 }
 
-// 画面全体を跳ね回る動き。速さを一定に保つので止まらず暴走もしない
-function stepRoam(machine, dt) {
-  const phys = PHYSICS.roam;
+// 画面の高い位置まで戻る上向きの初速を与える。跳ねる高さがばらつくので
+// 玉の動きがそろわず、画面の上下いっぱいを使う
+function bounceUp(machine, m) {
+  const apex = (BOUNCE_APEX_MIN + Math.random() * (BOUNCE_APEX_MAX - BOUNCE_APEX_MIN)) * machine.height;
+  m.vy = -Math.sqrt(2 * PHYSICS.bounce.gravity * apex);
+  const direction = m.vx < 0 ? -1 : 1;
+  const speed = clamp(Math.abs(m.vx) + (Math.random() - 0.5) * 30, BOUNCE_VX_MIN, BOUNCE_VX_MAX);
+  m.vx = direction * speed;
+}
+
+// 重力で落ちて跳ね返る動き。画面全体を使い、跳ねる高さが下がって溜まることはない
+function stepBounce(machine, dt) {
+  const phys = PHYSICS.bounce;
 
   for (const m of machine.marbles) {
+    m.vy += phys.gravity * dt;
+    if (m.vy > phys.maxSpeed) m.vy = phys.maxSpeed;
+
     m.x += m.vx * dt;
     m.y += m.vy * dt;
 
@@ -742,30 +754,40 @@ function stepRoam(machine, dt) {
     if (m.y < MARBLE_RADIUS) {
       m.y = MARBLE_RADIUS;
       m.vy = Math.abs(m.vy);
-    } else if (m.y > machine.height - MARBLE_RADIUS) {
+    }
+
+    let landedNormalY = 0;
+    for (const s of machine.segments) {
+      const ny = collideSegment(m, s, dt, phys);
+      if (ny < landedNormalY) landedNormalY = ny;
+    }
+    for (const p of machine.pegs) {
+      const ny = collidePeg(m, p, phys);
+      if (ny < landedNormalY) landedNormalY = ny;
+    }
+    for (const g of machine.gears) {
+      const ny = collideGear(m, g, phys);
+      if (ny < landedNormalY) landedNormalY = ny;
+    }
+
+    if (m.y > machine.height - MARBLE_RADIUS) {
+      // 床
       m.y = machine.height - MARBLE_RADIUS;
-      m.vy = -Math.abs(m.vy);
+      bounceUp(machine, m);
+    } else if (landedNormalY < -0.45 && m.vy > -BOUNCE_MIN_VY) {
+      // 上向きの面に乗った。弱い跳ね返りのままだと動きが減衰していくので押し上げる
+      bounceUp(machine, m);
     }
 
-    for (const s of machine.segments) collideSegment(m, s, dt, phys);
-    for (const p of machine.pegs) collidePeg(m, p, phys);
-    for (const g of machine.gears) collideGear(m, g, phys);
-
-    const speed = Math.hypot(m.vx, m.vy);
-    if (speed < 0.001 || !Number.isFinite(speed)) {
-      const angle = randomRoamAngle();
-      m.vx = Math.cos(angle) * m.targetSpeed;
-      m.vy = Math.sin(angle) * m.targetSpeed;
-    } else {
-      const scale = m.targetSpeed / speed;
-      m.vx *= scale;
-      m.vy *= scale;
+    if (Math.abs(m.vx) < BOUNCE_VX_MIN * 0.5) {
+      m.vx = (m.vx < 0 ? -1 : 1) * BOUNCE_VX_MIN;
     }
+    if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) resetMarble(machine, m, true);
 
-    // 狭い場所を往復し続けている玉は別の場所へ移す
+    // 狭い場所で往復し続けている玉は別の場所へ移す
     m.wanderTime += dt;
-    if (m.wanderTime >= ROAM_CHECK_S) {
-      if (Math.hypot(m.x - m.checkX, m.y - m.checkY) < ROAM_MIN_TRAVEL) {
+    if (m.wanderTime >= BOUNCE_CHECK_S) {
+      if (Math.hypot(m.x - m.checkX, m.y - m.checkY) < BOUNCE_MIN_TRAVEL) {
         resetMarble(machine, m, true);
       } else {
         m.wanderTime = 0;
@@ -781,8 +803,8 @@ export function stepMachine(machine, dt) {
     g.angle += g.omega * dt;
   }
 
-  if (machine.preset.motion === 'roam') {
-    stepRoam(machine, dt);
+  if (machine.preset.motion === 'bounce') {
+    stepBounce(machine, dt);
     return;
   }
 
