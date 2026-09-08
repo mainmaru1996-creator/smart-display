@@ -179,7 +179,7 @@ function buildStaticLayer() {
   layer.strokeStyle = style.chute;
   for (const a of machine.arcs) {
     layer.beginPath();
-    layer.arc(a.cx, a.cy, a.radius, Math.min(a.a0, a.a1), Math.max(a.a0, a.a1));
+    layer.arc(a.cx, a.cy, a.radius, a.a0, a.a1, a.a1 < a.a0);
     layer.stroke();
   }
 
@@ -208,17 +208,33 @@ function drawFixtures() {
   ctx.strokeStyle = style.lift;
   ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
+
   for (const lift of machine.lifts) {
     const w = lift.halfWidth;
     for (const bucket of lift.buckets) {
-      ctx.beginPath();
-      ctx.moveTo(lift.x - w, bucket.y - w);
-      ctx.lineTo(lift.x - w, bucket.y);
-      ctx.lineTo(lift.x + w, bucket.y);
-      ctx.lineTo(lift.x + w, bucket.y - w);
-      ctx.stroke();
+      drawBucket(lift.x, bucket.y, w);
     }
   }
+
+  // 周回コースでは、リフト区間にいるビー玉がバケットに乗って上がっていく
+  const routeLift = machine.route?.lift;
+  if (routeLift) {
+    const total = machine.route.total;
+    for (const m of machine.marbles) {
+      const distance = ((m.distance % total) + total) % total;
+      if (distance < routeLift.start || distance > routeLift.end) continue;
+      drawBucket(m.x, m.y + MARBLE_RADIUS + 3, routeLift.halfWidth);
+    }
+  }
+}
+
+function drawBucket(x, floorY, halfWidth) {
+  ctx.beginPath();
+  ctx.moveTo(x - halfWidth, floorY - halfWidth);
+  ctx.lineTo(x - halfWidth, floorY);
+  ctx.lineTo(x + halfWidth, floorY);
+  ctx.lineTo(x + halfWidth, floorY - halfWidth);
+  ctx.stroke();
 }
 
 function drawMarbles() {

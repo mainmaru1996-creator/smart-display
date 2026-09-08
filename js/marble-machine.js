@@ -388,24 +388,37 @@ function routeSpeedScale(dy, length) {
   return Math.max(ROUTE_MIN_SPEED_SCALE, scale);
 }
 
-// 折れ線の頂点から、距離で位置を引ける閉じたコースを作る
-function makeRoute(points) {
+// 直線と円弧からなる閉じたコースを、距離で位置を引ける形にまとめる
+function makeRoute(steps) {
   const legs = [];
   let total = 0;
-  for (let i = 0; i < points.length; i++) {
-    const from = points[i];
-    const to = points[(i + 1) % points.length];
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
+
+  for (const step of steps) {
+    if (step.type === 'arc') {
+      const length = Math.abs(step.a1 - step.a0) * step.radius;
+      if (length < 1) continue;
+      const dy = (Math.sin(step.a1) - Math.sin(step.a0)) * step.radius;
+      legs.push({
+        type: 'arc', cx: step.cx, cy: step.cy, radius: step.radius,
+        a0: step.a0, a1: step.a1, length, start: total,
+        speedScale: routeSpeedScale(dy, length),
+      });
+      total += length;
+      continue;
+    }
+
+    const dx = step.to.x - step.from.x;
+    const dy = step.to.y - step.from.y;
     const length = Math.hypot(dx, dy);
     if (length < 1) continue;
     legs.push({
-      x: from.x, y: from.y, dx, dy, length, start: total,
+      type: 'line', x: step.from.x, y: step.from.y, dx, dy, length, start: total,
       speedScale: routeSpeedScale(dy, length),
     });
     total += length;
   }
-  return { legs, total };
+
+  return { legs, total, lift: null };
 }
 
 export function routePosition(route, distance) {
@@ -417,55 +430,96 @@ export function routePosition(route, distance) {
     if (route.legs[mid].start <= wrapped) low = mid;
     else high = mid - 1;
   }
+
   const leg = route.legs[low];
   const t = (wrapped - leg.start) / leg.length;
+  if (leg.type === 'arc') {
+    const angle = leg.a0 + (leg.a1 - leg.a0) * t;
+    return {
+      x: leg.cx + Math.cos(angle) * leg.radius,
+      y: leg.cy + Math.sin(angle) * leg.radius,
+      speedScale: leg.speedScale,
+    };
+  }
   return { x: leg.x + leg.dx * t, y: leg.y + leg.dy * t, speedScale: leg.speedScale };
 }
 
-// 画面を蛇行しながら下り、片側の直線を通って上に戻る一本の閉じたコース。
-// 折り返しごとに向きが変わるので、画面全体をビー玉が順繰りに回る
+// 画面を蛇行しながら下り、片側のリフトで上に戻る一本の閉じたコース。
+// 折り返しは歯車の縁を半周する形にしてあり、歯車の回転がそのままビー玉を運ぶ。
+// 上りはバケット式リフトで、ビー玉はバケットに乗って戻る。
+// どちらの機構も、回転や移動の速さがコース上のビー玉の速さと一致する
 function buildRoute(m) {
   const margin = clamp(Math.min(m.width, m.height) * 0.07, 14, 46);
-  const returnLane = clamp(m.width * 0.1, 26, 60);
-  const left = margin + returnLane;
-  const right = m.width - margin;
+  const liftWidth = clamp(m.width * 0.09, 26, 54);
+  const liftX = margin + liftWidth / 2;
   const top = margin;
   const bottom = m.height - margin;
 
-  const rows = clamp(Math.round((bottom - top) / clamp(m.height / 5, 90, 190)), 2, 6);
-  const rowGap = (bottom - top) / rows;
+  const rows = clamp(Math.round((bottom - top) / clamp(m.height / 4.5, 110, 200)), 2, 5);
+  const rowGap = Math.max(60, (bottom - top - MARBLE_RADIUS * 8) / rows);
+  const turnRadius = Math.min(clamp(rowGap * 0.36, 16, 46), rowGap * 0.45);
+  const legDrop = Math.max(rowGap * 0.1, rowGap - turnRadius * 2);
 
-  const points = [{ x: left, y: top }];
+  const left = liftX + liftWidth / 2 + 12 + turnRadius;
+  const right = m.width - margin - turnRadius;
+
+  const steps = [];
+  let x = left;
+  let y = top;
+  let direction = 1;
+
   for (let row = 0; row < rows; row++) {
-    const y = top + rowGap * row;
-    const nextY = Math.min(bottom, y + rowGap);
-    const forward = row % 2 === 0;
-    const far = forward ? right : left;
-    points.push({ x: far, y: y + rowGap * 0.35 });   // 蛇行の横棒（わずかに下る）
-    if (row < rows - 1) {
-      // 落差の到達点が、そのまま次の横棒（逆向き）の始点になる
-      points.push({ x: far, y: nextY });
-      // 折り返しには歯車を飾りに置く
-      if (row % 2 === 0) {
-        const radius = clamp(rowGap * 0.22, 12, 26);
-        addGear(m, far + (forward ? -radius * 1.6 : radius * 1.6), nextY + radius * 1.4, radius,
-          (forward ? 1 : -1) * GEAR_SPEED);
-      }
-    }
+    const farX = direction > 0 ? right : left;
+    steps.push({ type: 'line', from: { x, y }, to: { x: farX, y: y + legDrop } });
+    x = farX;
+    y += legDrop;
+
+    if (row === rows - 1) break;
+
+    // 歯車の縁を半周して折り返す。入口は縁の真上、出口は真下
+    const centerY = y + turnRadius;
+    const a0 = -Math.PI / 2;
+    const a1 = direction > 0 ? Math.PI / 2 : -Math.PI * 1.5;
+    steps.push({ type: 'arc', cx: x, cy: centerY, radius: turnRadius, a0, a1 });
+
+    // 歯車の角速度をコース上の速さに合わせる。これで歯がビー玉を運ぶ動きになる
+    const scale = routeSpeedScale(turnRadius * 2, Math.PI * turnRadius);
+    const omega = ((direction > 0 ? 1 : -1) * ROUTE_SPEED * scale) / turnRadius;
+    addGear(m, x, centerY, Math.max(8, turnRadius - MARBLE_RADIUS - 2), omega);
+
+    y = centerY + turnRadius;
+    direction = -direction;
   }
 
-  // 最後の横棒の端から下端を通り、戻りの直線で上まで戻って始点に戻る
-  const lastForward = (rows - 1) % 2 === 0;
-  const lastFar = lastForward ? right : left;
-  points.push({ x: lastFar, y: bottom });
-  points.push({ x: margin, y: bottom });
-  points.push({ x: margin, y: top });
+  // 下端を通ってリフトの下まで運び、リフトで上に戻って始点に戻る
+  steps.push({ type: 'line', from: { x, y }, to: { x, y: bottom } });
+  steps.push({ type: 'line', from: { x, y: bottom }, to: { x: liftX, y: bottom } });
+  steps.push({ type: 'line', from: { x: liftX, y: bottom }, to: { x: liftX, y: top } });
+  steps.push({ type: 'line', from: { x: liftX, y: top }, to: { x: left, y: top } });
 
-  m.route = makeRoute(points);
+  m.route = makeRoute(steps);
 
-  // コースは描画のためだけに区間として持つ（通常表示では当たり判定を使わない）
+  // リフトの区間。描画側がこの区間にいるビー玉にバケットを描く
+  const liftLeg = m.route.legs.find((leg) => leg.type === 'line' && leg.dy < -20 && Math.abs(leg.x - liftX) < 1);
+  if (liftLeg) {
+    m.route.lift = {
+      start: liftLeg.start,
+      end: liftLeg.start + liftLeg.length,
+      x: liftX,
+      top,
+      bottom,
+      halfWidth: liftWidth / 2,
+    };
+    m.decorations.push({ type: 'lift-rail', x: liftX, top, bottom, halfWidth: liftWidth / 2 });
+  }
+
+  // コースは描画のためだけに持つ（通常表示では当たり判定を使わない）
   for (const leg of m.route.legs) {
-    addSegment(m, leg.x, leg.y, leg.x + leg.dx, leg.y + leg.dy, 'slope');
+    if (leg.type === 'arc') {
+      m.arcs.push({ cx: leg.cx, cy: leg.cy, radius: leg.radius, a0: leg.a0, a1: leg.a1, role: 'chute' });
+    } else {
+      addSegment(m, leg.x, leg.y, leg.x + leg.dx, leg.y + leg.dy, 'slope');
+    }
   }
 }
 
