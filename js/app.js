@@ -3,7 +3,9 @@ import { scheduleCalendarRefresh } from './calendar.js';
 import { scheduleWeatherRefresh } from './weather.js';
 import { setupSettings } from './settings.js';
 import { requestWakeLock, setupWakeLockReacquire } from './wakelock.js';
+import { startMarbleBackground } from './marbles.js';
 
+startMarbleBackground();
 startClock();
 scheduleCalendarRefresh();
 scheduleWeatherRefresh();

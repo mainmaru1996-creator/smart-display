@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <canvas id="marble-canvas" class="marble-canvas" aria-hidden="true"></canvas>
+
   <button id="settings-button" class="icon-button" aria-label="設定">⚙</button>
 
   <main class="dashboard">
@@ -39,6 +41,12 @@
       <h2>設定</h2>
       <label for="location-input">天気を表示する地域名</label>
       <input id="location-input" type="text" placeholder="例: 東京">
+
+      <div class="settings-row">
+        <label for="marble-toggle">背景のマーブル演出</label>
+        <input id="marble-toggle" type="checkbox">
+      </div>
+
       <div id="settings-error" class="settings-error"></div>
       <div class="modal-actions">
         <button id="settings-cancel" type="button">キャンセル</button>
@@ -46,6 +54,8 @@
       </div>
     </div>
   </div>
+
+  <div id="machine-hint" class="machine-hint" role="status" aria-live="polite"></div>
 
   <script type="module" src="js/app.js"></script>
 </body>

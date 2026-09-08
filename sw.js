@@ -1,4 +1,4 @@
-const CACHE_NAME = 'display-app-v4';
+const CACHE_NAME = 'display-app-v6';
 const CACHED_ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,8 @@ const CACHED_ASSETS = [
   './js/weather.js',
   './js/settings.js',
   './js/wakelock.js',
+  './js/marbles.js',
+  './js/marble-machine.js',
   './icons/icon.svg',
 ];
 

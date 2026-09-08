@@ -1,52 +1,98 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#000000">
-<title>卓上ディスプレイ</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-  <button id="settings-button" class="icon-button" aria-label="設定">⚙</button>
+# 卓上ディスプレイ (smart-display)
 
-  <main class="dashboard">
-    <section class="clock">
-      <div id="clock-time" class="clock-time">--:--</div>
-      <div id="clock-date" class="clock-date">----年--月--日</div>
-    </section>
+使わなくなったスマホを、**時計・カレンダー・天気**の卓上ディスプレイとして再利用するための Web アプリ (PWA) です。
+ブラウザで開いてホーム画面に追加すると、フルスクリーンの黒背景で常時表示できます。
 
-    <section class="panels">
-      <div class="panel calendar">
-        <h2 id="calendar-title" class="panel-title">カレンダー</h2>
-        <div id="calendar-grid" class="calendar-grid"></div>
-      </div>
+## 主な機能
 
-      <div class="panel weather">
-        <h2 class="panel-title">天気</h2>
-        <div id="weather-location" class="weather-location">--</div>
-        <div id="weather-temp" class="weather-temp">--°C</div>
-        <div id="weather-desc" class="weather-desc">読み込み中...</div>
-        <div id="weather-forecast" class="weather-forecast"></div>
-      </div>
-    </section>
-  </main>
+- **時計** — 時:分:秒と「2026年9月7日 日曜日」形式の日付を毎秒更新
+- **カレンダー** — 当月のカレンダー。今日を丸で強調し、日曜・土曜は色分け。日付が変わると自動で更新
+- **天気** — 現在の気温・天気と3日分の予報（[Open-Meteo](https://open-meteo.com/) を利用、30分ごとに更新）
+- **地域設定** — 右上の ⚙ から地域名を入力して切り替え（設定はブラウザに保存）
+- **背景のビー玉** — ビー玉が画面全体を跳ね回り、回転する歯車・弧や直線のバンパー・釘に当たって向きを変える。短い軌跡を残して動きが読めるようにしてある。文字の視認性を保つよう控えめな明るさで描画し、⚙ から ON/OFF 可
+- **演出モード（マーブルマシン）** — 画面をタップすると、多層フレームの中を傾斜スロープ → 管状のカーブシュート → 回転する歯車 → 段差の階段 → 釘の散らし、と落ちたビー玉をバケット式リフトが上へ運び返す「機械」の表示に切り替わる。時計は左上の小さな表示になり、カレンダーと天気は隠れる。もう一度タップで通常表示に戻る
+- **画面を消さない** — Screen Wake Lock API で常時点灯（非対応端末では自動的に無効）
+- **オフライン対応** — Service Worker が画面と資産をキャッシュ。オフラインでも時計とカレンダーは動作
 
-  <div id="settings-modal" class="modal hidden">
-    <div class="modal-content">
-      <h2>設定</h2>
-      <label for="location-input">天気を表示する地域名</label>
-      <input id="location-input" type="text" placeholder="例: 東京">
-      <div id="settings-error" class="settings-error"></div>
-      <div class="modal-actions">
-        <button id="settings-cancel" type="button">キャンセル</button>
-        <button id="settings-save" type="button">保存</button>
-      </div>
-    </div>
-  </div>
+## 使い方
 
-  <script type="module" src="js/app.js"></script>
-</body>
-</html>
+1. スマホのブラウザで公開URL（または後述のローカルサーバー）を開く
+2. ブラウザメニューから「ホーム画面に追加」
+3. ホーム画面のアイコンから起動するとフルスクリーンで表示される
+4. 右上の ⚙ で地域と背景演出を設定する
+5. 画面をタップすると演出モード（マーブルマシン）に切り替わる
+
+充電しながら横向き／縦向きどちらでも使えるよう、画面の向きと画面サイズに応じてレイアウトが切り替わります。
+
+## ローカルで動かす
+
+ES モジュールと Service Worker を使うため、`file://` ではなく HTTP で配信する必要があります。
+
+```bash
+python3 -m http.server 8000
+# → http://localhost:8000/ をブラウザで開く
+```
+
+## 構成
+
+ビルドツールや依存パッケージはありません。素の HTML / CSS / JavaScript (ES モジュール) だけで動きます。
+
+```
+index.html        画面のマークアップ（時計・カレンダー・天気・設定モーダル）
+manifest.json     PWA マニフェスト（フルスクリーン表示、アイコン）
+sw.js             Service Worker（ネットワーク優先＋キャッシュへフォールバック）
+css/style.css     全体のスタイル。画面の向き・高さごとのレイアウト調整
+icons/icon.svg    アプリアイコン
+js/app.js         起動処理（各モジュールの初期化と Service Worker 登録）
+js/clock.js       時計表示
+js/calendar.js    月カレンダーの生成と日付変更時の再描画
+js/weather.js     Open-Meteo からの天気取得・描画、地域の保存
+js/settings.js    設定モーダル（地域検索、背景演出の切り替え）
+js/marbles.js     マーブルマシンの描画・モード切り替え・フレーム制御（Canvas）
+js/marble-machine.js  マーブルマシンの仕掛けの生成と物理（描画は持たない）
+js/wakelock.js    画面の常時点灯
+```
+
+### 背景のビー玉について
+
+常時表示の背景は、重力で落とすのではなく **速さを一定に保って跳ね回らせます**。
+落下させると動きが軌道の帯に限られて画面の大部分が止まって見えるためです。
+速さが一定なので止まることも暴走することもなく、詰まりが起きません。
+障害物（小さな歯車・弧と直線のバンパー・釘のかたまり）は画面全体に散らして配置し、
+互いにビー玉が通れる間隔を空けます。万一狭い場所を往復し続けるビー玉があれば、
+10秒ごとの移動量を見て別の場所へ移します。
+
+30fpsだと速いビー玉の動きが飛んで見えるため、短い軌跡を残しています。
+
+### 演出モード（マーブルマシン）について
+
+仕掛けは画面サイズから毎回組み立てます。画面が広いときは「レーン」に分割し、
+1レーンに1台ずつ機械を並べます（横向きのスマホなら2台）。
+
+段は固定のグリッドではなく、**前の段の実際の出口から一定の落差で**次の段を置きます。
+グリッドで並べると、仕掛けの出口の高さと次の段の高さが数pxずれるだけで
+ビー玉が段の外へ落ちてしまうためです。同じ理由で、次の段は着地点より手前から始めて重ね、
+落下区間の外側にはガードレールを立て、釘で散らした直後の段は壁から始めて幅いっぱいで受けます。
+組み立て後には、仕掛け同士がビー玉1個分未満の隙間で隣り合っていないかを検証し、
+挟まる原因になる区間を切り落として釘を間引きます。
+それでも動かなくなったビー玉は投入口へ戻します。
+
+2Dの重力では螺旋シュートは成立しません（1周の半分が上り坂になりビー玉が登れない）。
+そのためカーブは、内側と外側の2枚の壁で挟んだ**管**として作り、下りカーブだけで構成しています。
+
+演出モードのリフトは、動く床の上でビー玉を釣り合わせるのではなく、
+バケットがビー玉を掴んで運びます（見た目は同じで、確実に循環します）。
+受け皿でバケットを待っているビー玉は、止まっていても詰まりとは見なしません。
+
+### 電力について
+
+常時つけっぱなしで使う前提のため、描画は背景で 30fps、演出モードで 45fps に抑え、
+画面が隠れている間 (`visibilitychange`) は描画を完全に停止します。
+静止している仕掛け（斜面・段差・カーブ・釘・フレーム）はオフスクリーンに一度だけ描いて
+毎フレーム転送し、歯車はスプライトを回転させて描きます。
+OS の「視差効果を減らす」設定 (`prefers-reduced-motion`) が有効な場合はアニメーションせず、
+仕掛けだけを静止画として描画します。
+
+## 外部サービス
+
+天気と地名検索に [Open-Meteo](https://open-meteo.com/) の公開 API を使用しています。API キーは不要です。

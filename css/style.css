@@ -23,7 +23,18 @@ html, body {
   overflow: hidden;
 }
 
+.marble-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .dashboard {
+  position: relative;
+  z-index: 1;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -177,6 +188,55 @@ html, body {
   opacity: 1;
 }
 
+/* 演出モード: 仕掛けを主役にして、時計は隅の小さな表示にする */
+body.machine-mode .panels {
+  display: none;
+}
+
+body.machine-mode .dashboard {
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: clamp(0.75rem, 3vw, 1.75rem);
+}
+
+body.machine-mode .clock {
+  text-align: left;
+}
+
+body.machine-mode .clock-time {
+  font-size: clamp(1.5rem, 6vw, 2.5rem);
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body.machine-mode .clock-date {
+  margin-top: 0.15rem;
+  font-size: clamp(0.65rem, 2vw, 0.9rem);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.machine-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 15;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.machine-hint.visible {
+  opacity: 1;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -214,6 +274,27 @@ html, body {
   background: #0a0b0e;
   color: var(--fg);
   font-size: 1rem;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.settings-row label {
+  margin-bottom: 0;
+}
+
+.settings-row input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .settings-error {
