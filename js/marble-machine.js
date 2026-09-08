@@ -36,25 +36,19 @@ const STUCK_LIMIT_S = 3.5;
 
 const LIFT_SPEED = 115;             // px/s。搬送が遅いと玉が受け皿に溜まって機械が空になる
 
-// 通常表示: 重力で落ち、障害物に弾かれながら下端まで行ったら上から入れ直す
-const FALL_SPAWN_VX = 40;           // 投入時の横方向の速さのばらつき（px/s）
-const FALL_CHECK_S = 10;            // 狭い場所に閉じ込められていないか調べる間隔
-const FALL_MIN_TRAVEL = 50;         // この間にこれだけ動いていなければ入れ直す
+// 通常表示: 閉じた周回コースの上をビー玉が順繰りに流れていく
+const ROUTE_SPEED = 78;             // コース上を進む基準の速さ（px/s）
+// 速度差を付けすぎるとビー玉の間隔が坂で開いてしまうので、控えめにする
+const ROUTE_DOWNHILL_GAIN = 0.45;   // 下り坂でどれだけ速くなるか
+const ROUTE_UPHILL_LOSS = 0.3;      // 上り坂でどれだけ遅くなるか
+const ROUTE_MIN_SPEED_SCALE = 0.35; // 上りでも止まらないための下限
 
-// 重力で落ちる仕掛け（演出モード）と、画面全体を跳ね回る動き（通常表示）
+// 演出モードの仕掛けを落ちるビー玉に使う物理
 const PHYSICS = {
   gravity: {
     gravity: GRAVITY, drag: AIR_DRAG, maxSpeed: MAX_SPEED,
     surface: SURFACE_RESTITUTION, roll: ROLL_RESISTANCE, wall: WALL_RESTITUTION,
     peg: PEG_RESTITUTION, gear: GEAR_RESTITUTION, grip: GEAR_GRIP,
-  },
-  fall: {
-    // 常時表示の背景なので、落下が速すぎて慌ただしくならない程度に重力を弱め、
-    // 落下速度にも上限を置いてある
-    gravity: 300, drag: 0, maxSpeed: 280,
-    // 跳ね上がらず落ちていく見え方にしたいので、反発は弱めにして弾かれる程度に留める
-    surface: 0.25, roll: 0.8, wall: 0.4,
-    peg: 0.35, gear: 0.3, grip: 0.15,
   },
 };
 
@@ -85,9 +79,9 @@ function pickFloorKind(kinds, index, remaining, floorGap) {
 }
 
 export const PRESETS = {
-  // 常時表示の背景。控えめに、ビー玉が画面全体を落ちていく
+  // 常時表示の背景。控えめに、決まった周回コースをビー玉が順繰りに回る
   background: {
-    motion: 'fall',
+    motion: 'route',
     marbleCount: 12,
   },
   // 演出モード。多層フレームとリフトで玉が循環する
@@ -383,79 +377,95 @@ function buildLane(m, laneX, laneWidth, preset) {
   }
 }
 
-/* ---------------- 跳ね回る場（通常表示） ---------------- */
+/* ---------------- 周回コース（通常表示） ---------------- */
 
-
-// 障害物同士が近すぎないように場所を探す
-function placeCircle(m, placed, radius, margin) {
-  const spanX = Math.max(1, m.width - (margin + radius) * 2);
-  const spanY = Math.max(1, m.height - (margin + radius) * 2);
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const x = margin + radius + Math.random() * spanX;
-    const y = margin + radius + Math.random() * spanY;
-    let clear = true;
-    for (const c of placed) {
-      if (Math.hypot(x - c.x, y - c.y) < c.r + radius + MARBLE_RADIUS * 5) {
-        clear = false;
-        break;
-      }
-    }
-    if (clear) {
-      placed.push({ x, y, r: radius });
-      return { x, y };
-    }
-  }
-  return null;
+function routeSpeedScale(dy, length) {
+  // 下りでは速く、上りでは遅く。重力で流れている感じを出すが、上りでも止まらない
+  const slope = length > 0 ? dy / length : 0;
+  const scale = slope >= 0
+    ? 1 + slope * ROUTE_DOWNHILL_GAIN
+    : 1 + slope * ROUTE_UPHILL_LOSS;
+  return Math.max(ROUTE_MIN_SPEED_SCALE, scale);
 }
 
-function buildFallField(m) {
-  const placed = [];
-  const short = Math.min(m.width, m.height);
-  const area = m.width * m.height;
+// 折れ線の頂点から、距離で位置を引ける閉じたコースを作る
+function makeRoute(points) {
+  const legs = [];
+  let total = 0;
+  for (let i = 0; i < points.length; i++) {
+    const from = points[i];
+    const to = points[(i + 1) % points.length];
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) continue;
+    legs.push({
+      x: from.x, y: from.y, dx, dy, length, start: total,
+      speedScale: routeSpeedScale(dy, length),
+    });
+    total += length;
+  }
+  return { legs, total };
+}
 
-  // 回転する歯車。縁の周速度で玉の向きを変える
-  // 文字の背後で目立ちすぎないよう、背景の歯車は小さく少なくする
-  const gearCount = clamp(Math.round(area / 160000), 1, 3);
-  for (let i = 0; i < gearCount; i++) {
-    const radius = clamp(short / 16, 14, 28);
-    const spot = placeCircle(m, placed, radius, 18);
-    if (spot) addGear(m, spot.x, spot.y, radius, (i % 2 === 0 ? 1 : -1) * GEAR_SPEED);
+export function routePosition(route, distance) {
+  const wrapped = ((distance % route.total) + route.total) % route.total;
+  let low = 0;
+  let high = route.legs.length - 1;
+  while (low < high) {
+    const mid = (low + high + 1) >> 1;
+    if (route.legs[mid].start <= wrapped) low = mid;
+    else high = mid - 1;
+  }
+  const leg = route.legs[low];
+  const t = (wrapped - leg.start) / leg.length;
+  return { x: leg.x + leg.dx * t, y: leg.y + leg.dy * t, speedScale: leg.speedScale };
+}
+
+// 画面を蛇行しながら下り、片側の直線を通って上に戻る一本の閉じたコース。
+// 折り返しごとに向きが変わるので、画面全体をビー玉が順繰りに回る
+function buildRoute(m) {
+  const margin = clamp(Math.min(m.width, m.height) * 0.07, 14, 46);
+  const returnLane = clamp(m.width * 0.1, 26, 60);
+  const left = margin + returnLane;
+  const right = m.width - margin;
+  const top = margin;
+  const bottom = m.height - margin;
+
+  const rows = clamp(Math.round((bottom - top) / clamp(m.height / 5, 90, 190)), 2, 6);
+  const rowGap = (bottom - top) / rows;
+
+  const points = [{ x: left, y: top }];
+  for (let row = 0; row < rows; row++) {
+    const y = top + rowGap * row;
+    const nextY = Math.min(bottom, y + rowGap);
+    const forward = row % 2 === 0;
+    const far = forward ? right : left;
+    points.push({ x: far, y: y + rowGap * 0.35 });   // 蛇行の横棒（わずかに下る）
+    if (row < rows - 1) {
+      // 落差の到達点が、そのまま次の横棒（逆向き）の始点になる
+      points.push({ x: far, y: nextY });
+      // 折り返しには歯車を飾りに置く
+      if (row % 2 === 0) {
+        const radius = clamp(rowGap * 0.22, 12, 26);
+        addGear(m, far + (forward ? -radius * 1.6 : radius * 1.6), nextY + radius * 1.4, radius,
+          (forward ? 1 : -1) * GEAR_SPEED);
+      }
+    }
   }
 
-  // 弧のバンパー
-  const arcCount = clamp(Math.round(area / 150000), 1, 4);
-  for (let i = 0; i < arcCount; i++) {
-    const radius = clamp(short / 7, 26, 70);
-    const spot = placeCircle(m, placed, radius, 14);
-    if (!spot) continue;
-    // 弧は円の上側だけを使う。お椀型にするとビー玉が底に溜まってしまう
-    const from = -Math.PI + Math.random() * 0.35;
-    addArc(m, spot.x, spot.y, radius, from, from + Math.PI * (0.4 + Math.random() * 0.35), 'chute');
-  }
+  // 最後の横棒の端から下端を通り、戻りの直線で上まで戻って始点に戻る
+  const lastForward = (rows - 1) % 2 === 0;
+  const lastFar = lastForward ? right : left;
+  points.push({ x: lastFar, y: bottom });
+  points.push({ x: margin, y: bottom });
+  points.push({ x: margin, y: top });
 
-  // 直線のバンパー
-  const bumperCount = clamp(Math.round(area / 60000), 3, 10);
-  for (let i = 0; i < bumperCount; i++) {
-    const length = clamp(short / 5, 40, 110);
-    const spot = placeCircle(m, placed, length / 2, 10);
-    if (!spot) continue;
-    // 水平に近いバンパーはビー玉が乗って止まるので、必ず傾けて置く
-    const angle = 0.3 + Math.random() * (Math.PI - 0.6);
-    const dx = (Math.cos(angle) * length) / 2;
-    const dy = (Math.sin(angle) * length) / 2;
-    addSegment(m, spot.x - dx, spot.y - dy, spot.x + dx, spot.y + dy, 'slope');
-  }
+  m.route = makeRoute(points);
 
-  // 釘のかたまり
-  const clusterCount = clamp(Math.round(area / 90000), 2, 6);
-  for (let i = 0; i < clusterCount; i++) {
-    const spread = clamp(short / 12, 18, 34);
-    const spot = placeCircle(m, placed, spread, 12);
-    if (!spot) continue;
-    addPeg(m, spot.x, spot.y - spread * 0.6);
-    addPeg(m, spot.x, spot.y + spread * 0.6);
-    addPeg(m, spot.x - spread * 0.6, spot.y);
-    addPeg(m, spot.x + spread * 0.6, spot.y);
+  // コースは描画のためだけに区間として持つ（通常表示では当たり判定を使わない）
+  for (const leg of m.route.legs) {
+    addSegment(m, leg.x, leg.y, leg.x + leg.dx, leg.y + leg.dy, 'slope');
   }
 }
 
@@ -518,19 +528,15 @@ function pruneTightGaps(m) {
 /* ---------------- 玉 ---------------- */
 
 function resetMarble(m, marble, spread) {
-  if (m.preset.motion === 'fall') {
-    const margin = MARBLE_RADIUS * 3;
-    marble.x = margin + Math.random() * Math.max(1, m.width - margin * 2);
-    marble.y = spread
-      ? -MARBLE_RADIUS - Math.random() * (m.height + MARBLE_RADIUS)
-      : -MARBLE_RADIUS * 2;
-    marble.vx = (Math.random() - 0.5) * FALL_SPAWN_VX;
+  if (m.preset.motion === 'route') {
+    marble.distance = Math.random() * m.route.total;
+    const spot = routePosition(m.route, marble.distance);
+    marble.x = spot.x;
+    marble.y = spot.y;
+    marble.vx = 0;
     marble.vy = 0;
     marble.stillTime = 0;
     marble.carried = false;
-    marble.wanderTime = 0;
-    marble.checkX = marble.x;
-    marble.checkY = marble.y;
     return;
   }
 
@@ -694,12 +700,12 @@ export function createMachine(width, height, mode) {
   const machine = {
     width, height, mode, preset,
     segments: [], arcs: [], pegs: [], gears: [], lifts: [], decorations: [],
-    lanes: [], marbles: [], spawn: null,
+    lanes: [], marbles: [], spawn: null, route: null,
   };
 
-  if (preset.motion === 'fall') {
+  if (preset.motion === 'route') {
     machine.lanes.push({ x: 0, width });
-    buildFallField(machine);
+    buildRoute(machine);
   } else {
     const laneCount = Math.max(1, Math.round(width / preset.laneTargetWidth));
     const laneWidth = width / laneCount;
@@ -712,57 +718,32 @@ export function createMachine(width, height, mode) {
   pruneTightGaps(machine);
 
   for (let i = 0; i < preset.marbleCount; i++) {
-    const marble = { x: 0, y: 0, vx: 0, vy: 0, stillTime: 0, carried: false, wanderTime: 0, checkX: 0, checkY: 0 };
+    const marble = { x: 0, y: 0, vx: 0, vy: 0, stillTime: 0, carried: false, wanderTime: 0, checkX: 0, checkY: 0, distance: 0 };
     resetMarble(machine, marble, true);
     machine.marbles.push(marble);
+  }
+
+  // コース上では等間隔に並べて、順繰りに流れて見えるようにする
+  if (machine.route) {
+    machine.marbles.forEach((marble, index) => {
+      marble.distance = (machine.route.total * index) / machine.marbles.length;
+      const spot = routePosition(machine.route, marble.distance);
+      marble.x = spot.x;
+      marble.y = spot.y;
+    });
   }
 
   return machine;
 }
 
-// 重力で落ちる動き。障害物に弾かれながら下端まで行ったら、上から入れ直す
-function stepFall(machine, dt) {
-  const phys = PHYSICS.fall;
-
+// 決まった周回コースの上を順繰りに流れる。跳ね返りも詰まりもない
+function stepRoute(machine, dt) {
   for (const m of machine.marbles) {
-    m.vy += phys.gravity * dt;
-    if (m.vy > phys.maxSpeed) m.vy = phys.maxSpeed;
-
-    m.x += m.vx * dt;
-    m.y += m.vy * dt;
-
-    if (m.x < MARBLE_RADIUS) {
-      m.x = MARBLE_RADIUS;
-      m.vx = Math.abs(m.vx) * phys.wall;
-    } else if (m.x > machine.width - MARBLE_RADIUS) {
-      m.x = machine.width - MARBLE_RADIUS;
-      m.vx = -Math.abs(m.vx) * phys.wall;
-    }
-
-    for (const s of machine.segments) collideSegment(m, s, dt, phys);
-    for (const p of machine.pegs) collidePeg(m, p, phys);
-    for (const g of machine.gears) collideGear(m, g, phys);
-
-    // 障害物の上で止まってしまった玉も入れ直す
-    m.stillTime = Math.hypot(m.vx, m.vy) < STUCK_SPEED ? m.stillTime + dt : 0;
-
-    const outOfBounds = m.y - MARBLE_RADIUS > machine.height || m.x < -40 || m.x > machine.width + 40;
-    if (outOfBounds || m.stillTime > STUCK_LIMIT_S || !Number.isFinite(m.x) || !Number.isFinite(m.y)) {
-      resetMarble(machine, m, false);
-      continue;
-    }
-
-    // 狭い場所で往復し続けている玉も入れ直す
-    m.wanderTime += dt;
-    if (m.wanderTime >= FALL_CHECK_S) {
-      if (Math.hypot(m.x - m.checkX, m.y - m.checkY) < FALL_MIN_TRAVEL) {
-        resetMarble(machine, m, false);
-      } else {
-        m.wanderTime = 0;
-        m.checkX = m.x;
-        m.checkY = m.y;
-      }
-    }
+    const spot = routePosition(machine.route, m.distance);
+    m.distance += ROUTE_SPEED * spot.speedScale * dt;
+    const next = routePosition(machine.route, m.distance);
+    m.x = next.x;
+    m.y = next.y;
   }
 }
 
@@ -771,8 +752,8 @@ export function stepMachine(machine, dt) {
     g.angle += g.omega * dt;
   }
 
-  if (machine.preset.motion === 'fall') {
-    stepFall(machine, dt);
+  if (machine.preset.motion === 'route') {
+    stepRoute(machine, dt);
     return;
   }
 

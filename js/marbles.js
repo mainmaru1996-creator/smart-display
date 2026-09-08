@@ -11,7 +11,7 @@ const STYLES = {
   background: {
     fps: 30,
     lineWidth: 4,
-    trail: 6,
+    trail: 4,
     frame: 'rgba(255, 255, 255, 0.10)',
     slope: 'rgba(255, 255, 255, 0.11)',
     step: 'rgba(255, 255, 255, 0.11)',
